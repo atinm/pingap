@@ -25,6 +25,7 @@ use pingora::tls::ext;
 use pingora::tls::pkey::{PKey, Private};
 use pingora::tls::ssl::{NameType, SslRef};
 use pingora::tls::x509::X509;
+use rcgen::{SanType, Ia5String};
 use snafu::Snafu;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -304,8 +305,6 @@ fn new_certificate_with_ca(
             message: e.to_string(),
             category: "parse_ca_key".to_string(),
         })?;
-    let not_before = ca_params.not_before;
-    let not_after = ca_params.not_after;
     let ca_cert =
         ca_params.self_signed(&ca_kp).map_err(|e| Error::Invalid {
             message: e.to_string(),
@@ -318,6 +317,7 @@ fn new_certificate_with_ca(
             category: "new_cert_params".to_string(),
         })?;
     let mut dn = rcgen::DistinguishedName::new();
+
     dn.push(rcgen::DnType::CommonName, cn.to_string());
     if let Some(organ) = ca_cert
         .params()
@@ -335,8 +335,13 @@ fn new_certificate_with_ca(
     };
 
     params.distinguished_name = dn;
-    params.not_before = not_before;
-    params.not_after = not_after;
+    params.subject_alt_names = vec![
+        SanType::DnsName(Ia5String::try_from(cn.to_string()).unwrap()),
+    ];
+    params.not_before = time::OffsetDateTime::now_utc();
+    let ca_cert_not_after = ca_cert.params().not_after;
+    let two_years_from_now = time::OffsetDateTime::now_utc() + time::Duration::days(365 * 2);
+    params.not_after = ca_cert_not_after.min(two_years_from_now);
 
     let cert_key = rcgen::KeyPair::generate().map_err(|e| Error::Invalid {
         message: e.to_string(),
