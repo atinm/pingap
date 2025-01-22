@@ -461,8 +461,13 @@ impl Upstream {
                 self.sni.clone()
             };
             // Create peer with host:port, TLS settings, and SNI
+            let port = if self.tls {
+                443
+            } else {
+                80
+            };
             Some(HttpPeer::new(
-                format!("{host}:{}", ctx.server_port.unwrap_or(80)),
+                format!("{host}:{port}"),
                 self.tls,
                 sni,
             ))
